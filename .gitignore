@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+.env
+
+# Data artifacts
+/data/raw/
+/data/processed/
+/data/interim/
+/data/tmp/
+
+# Notebooks
+/.ipynb_checkpoints/
+
+# OS
+.DS_Store
