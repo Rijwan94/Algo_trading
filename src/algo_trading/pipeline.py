@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict
 
 import pandas as pd
@@ -64,7 +64,7 @@ def run_pipeline(config: Dict) -> Dict:
 
 
 def train_and_save_pair(pair: str, X: pd.DataFrame, y: pd.Series, config: Dict, metrics: Dict) -> Dict:
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     output_dir = ensure_dir(f"{config['models']['output_dir']}/{pair}/{timestamp}")
 
     X_scaled, _, scaler = scale_features(X)

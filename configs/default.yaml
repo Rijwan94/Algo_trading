@@ -8,7 +8,7 @@ data:
     - "EURUSD=X"
     - "XAUUSD=X"
     - "XAGUSD=X"
-    - "XAUCHF=X"
+    - "XAUCHF=X" # Verify ticker availability with your data provider.
   start: "2015-01-01"
   end: null
   interval: "1h"
