@@ -11,7 +11,6 @@ from .utils import ensure_dir
 def _standardize_dataframe(df: pd.DataFrame, timezone: str) -> pd.DataFrame:
     df = df.copy()
     df.columns = [col.lower().replace(" ", "_") for col in df.columns]
-    df = df.rename(columns={"adj_close": "adj_close"})
     if df.index.tz is None:
         df.index = df.index.tz_localize(timezone)
     else:

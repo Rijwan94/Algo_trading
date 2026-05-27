@@ -123,10 +123,12 @@ def backtest_strategy(
         position = desired_position
 
     returns = np.array(returns)
-    cumulative = float((1 + returns).prod() - 1)
+    equity_curve = np.cumprod(1 + returns)
+    cumulative = float(equity_curve[-1] - 1) if len(equity_curve) else 0.0
     sharpe = float(np.mean(returns) / (np.std(returns) + 1e-9) * np.sqrt(252))
-    drawdown = np.maximum.accumulate(np.cumsum(returns)) - np.cumsum(returns)
-    max_drawdown = float(np.max(drawdown))
+    peak = np.maximum.accumulate(equity_curve) if len(equity_curve) else np.array([0.0])
+    drawdown = peak - equity_curve if len(equity_curve) else np.array([0.0])
+    max_drawdown = float(np.max(drawdown)) if len(drawdown) else 0.0
 
     return {
         "cumulative_return": cumulative,
