@@ -28,8 +28,10 @@ def add_volume_features(df: pd.DataFrame, use_volume: bool, proxy: str) -> pd.Da
         volume = df["volume"].fillna(0.0)
         if proxy == "range":
             proxy_volume = (df["high"] - df["low"]).abs()
-        else:
+        elif proxy == "diff":
             proxy_volume = df["close"].diff().abs()
+        else:
+            raise ValueError(f"Unsupported volume proxy: {proxy}. Use 'range' or 'diff'.")
         volume = volume.mask(volume <= 0.0, proxy_volume)
         df["volume_proxy"] = proxy_volume
         df["volume_filled"] = volume

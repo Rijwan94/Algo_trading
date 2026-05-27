@@ -145,9 +145,9 @@ def backtest_strategy(
     cumulative = float(equity_curve[-1] - 1) if len(equity_curve) else 0.0
     volatility = float(np.std(returns, ddof=1)) if len(returns) > 1 else 0.0
     sharpe = float(np.mean(returns) / (volatility + 1e-9) * np.sqrt(periods_per_year))
-    peak = np.maximum.accumulate(equity_curve) if len(equity_curve) else np.array([0.0])
-    drawdown = peak - equity_curve if len(equity_curve) else np.array([0.0])
-    max_drawdown = float(np.max(drawdown)) if len(drawdown) else 0.0
+    running_peak = np.maximum.accumulate(equity_curve) if len(equity_curve) else np.array([0.0])
+    drawdown_series = running_peak - equity_curve if len(equity_curve) else np.array([0.0])
+    max_drawdown = float(np.max(drawdown_series)) if len(drawdown_series) else 0.0
 
     return {
         "cumulative_return": cumulative,

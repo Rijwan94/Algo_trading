@@ -15,7 +15,7 @@ def handle_missing(df: pd.DataFrame, method: str) -> pd.DataFrame:
         return df.bfill().ffill()
     if method == "drop":
         return df.dropna()
-    return df
+    raise ValueError(f"Unsupported missing data method: {method}. Use 'ffill', 'bfill', or 'drop'.")
 
 
 def clip_outliers(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
