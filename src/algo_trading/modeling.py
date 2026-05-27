@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -53,10 +53,10 @@ def predict_quantiles(models: Dict[float, GradientBoostingRegressor], X: np.ndar
 def scale_features(
     X_fit: pd.DataFrame,
     X_transform: pd.DataFrame | None = None,
-) -> Tuple[np.ndarray, np.ndarray, StandardScaler]:
+) -> Tuple[np.ndarray, Optional[np.ndarray], StandardScaler]:
     scaler = StandardScaler()
     X_fit_scaled = scaler.fit_transform(X_fit)
     if X_transform is None:
-        return X_fit_scaled, X_fit_scaled, scaler
+        return X_fit_scaled, None, scaler
     X_transform_scaled = scaler.transform(X_transform)
     return X_fit_scaled, X_transform_scaled, scaler
