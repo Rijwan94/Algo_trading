@@ -7,7 +7,13 @@ import pandas as pd
 import joblib
 
 from .data import align_pairs, fetch_all_pairs
-from .evaluation import backtest_strategy, compute_confidence, evaluate_splits, walk_forward_splits
+from .evaluation import (
+    backtest_strategy,
+    compute_confidence,
+    evaluate_splits,
+    interval_to_periods_per_year,
+    walk_forward_splits,
+)
 from .features import add_correlation_features, build_features
 from .modeling import build_training_frame, fit_quantile_models, predict_quantiles, scale_features, select_features
 from .preprocessing import preprocess_pair
@@ -61,7 +67,7 @@ def train_and_save_pair(pair: str, X: pd.DataFrame, y: pd.Series, config: Dict, 
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     output_dir = ensure_dir(f"{config['models']['output_dir']}/{pair}/{timestamp}")
 
-    X_scaled, _, scaler = scale_features(X, X)
+    X_scaled, _, scaler = scale_features(X)
     models = fit_quantile_models(
         X_scaled,
         y.values,
@@ -107,6 +113,7 @@ def train_and_save_pair(pair: str, X: pd.DataFrame, y: pd.Series, config: Dict, 
     }
 
 def backtest_last_split(X: pd.DataFrame, y: pd.Series, config: Dict) -> Dict:
+    periods_per_year = interval_to_periods_per_year(config["data"]["interval"])
     splits = list(
         walk_forward_splits(
             len(X),
@@ -143,4 +150,5 @@ def backtest_last_split(X: pd.DataFrame, y: pd.Series, config: Dict) -> Dict:
         threshold=config["confidence"]["minimum_confidence"],
         transaction_cost_bps=config["backtest"]["transaction_cost_bps"],
         slippage_bps=config["backtest"]["slippage_bps"],
+        periods_per_year=periods_per_year,
     )

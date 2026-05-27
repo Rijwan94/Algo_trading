@@ -15,6 +15,8 @@ def add_returns(df: pd.DataFrame, horizons: List[int]) -> pd.DataFrame:
 
 def add_volatility(df: pd.DataFrame, windows: List[int]) -> pd.DataFrame:
     df = df.copy()
+    if "return_1" not in df.columns:
+        df["return_1"] = df["close"].pct_change(1)
     for window in windows:
         df[f"volatility_{window}"] = df["return_1"].rolling(window).std()
     return df
@@ -39,8 +41,8 @@ def add_session_flags(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     hours = df.index.hour
     df["session_asia"] = ((hours >= 0) & (hours < 8)).astype(int)
-    df["session_europe"] = ((hours >= 7) & (hours < 15)).astype(int)
-    df["session_us"] = ((hours >= 13) & (hours < 21)).astype(int)
+    df["session_europe"] = ((hours >= 8) & (hours < 16)).astype(int)
+    df["session_us"] = ((hours >= 16) & (hours < 24)).astype(int)
     return df
 
 

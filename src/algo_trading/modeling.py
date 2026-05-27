@@ -52,9 +52,11 @@ def predict_quantiles(models: Dict[float, GradientBoostingRegressor], X: np.ndar
 
 def scale_features(
     X_fit: pd.DataFrame,
-    X_transform: pd.DataFrame,
+    X_transform: pd.DataFrame | None = None,
 ) -> Tuple[np.ndarray, np.ndarray, StandardScaler]:
     scaler = StandardScaler()
+    if X_transform is None:
+        X_transform = X_fit
     X_fit_scaled = scaler.fit_transform(X_fit)
     X_transform_scaled = scaler.transform(X_transform)
     return X_fit_scaled, X_transform_scaled, scaler

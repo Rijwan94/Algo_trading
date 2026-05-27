@@ -37,6 +37,7 @@ ML/AI pipeline for forex and metals time-series forecasting with volatility- and
 
 ## Notes on Data Providers
 - `yfinance` supports many FX and metals symbols (e.g., `EURUSD=X`, `XAUUSD=X`).
+- Symbol availability varies; confirm tickers like `XAUCHF=X` are supported or replace with your preferred data source.
 - For providers without real volume, the pipeline uses a range-based proxy.
 - To use CSV ingestion, set `data.provider: csv` and place files in `data/raw/` named `<PAIR>.csv`.
 

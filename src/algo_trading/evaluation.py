@@ -9,6 +9,23 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from .modeling import fit_quantile_models, predict_quantiles, scale_features
 
 
+def interval_to_periods_per_year(interval: str) -> int:
+    interval = interval.lower().strip()
+    if interval.endswith("h"):
+        hours = int(interval.replace("h", ""))
+        return max(int((24 / hours) * 252), 1)
+    if interval.endswith("d"):
+        days = int(interval.replace("d", ""))
+        return max(int(252 / days), 1)
+    if interval.endswith("wk"):
+        weeks = int(interval.replace("wk", ""))
+        return max(int(52 / weeks), 1)
+    if interval.endswith("mo"):
+        months = int(interval.replace("mo", ""))
+        return max(int(12 / months), 1)
+    return 252
+
+
 def walk_forward_splits(
     n_samples: int,
     initial_train_size: float,
@@ -108,6 +125,7 @@ def backtest_strategy(
     threshold: float,
     transaction_cost_bps: float,
     slippage_bps: float,
+    periods_per_year: int,
 ) -> Dict:
     position = 0.0
     returns = []
@@ -123,9 +141,9 @@ def backtest_strategy(
         position = desired_position
 
     returns = np.array(returns)
-    equity_curve = np.cumprod(1 + returns)
+    equity_curve = 1 + np.cumsum(returns)
     cumulative = float(equity_curve[-1] - 1) if len(equity_curve) else 0.0
-    sharpe = float(np.mean(returns) / (np.std(returns) + 1e-9) * np.sqrt(252))
+    sharpe = float(np.mean(returns) / (np.std(returns) + 1e-9) * np.sqrt(periods_per_year))
     peak = np.maximum.accumulate(equity_curve) if len(equity_curve) else np.array([0.0])
     drawdown = peak - equity_curve if len(equity_curve) else np.array([0.0])
     max_drawdown = float(np.max(drawdown)) if len(drawdown) else 0.0

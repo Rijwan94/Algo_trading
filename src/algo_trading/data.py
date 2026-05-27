@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Dict, Optional
 
+import time
+
 import pandas as pd
 import yfinance as yf
 
@@ -19,10 +21,31 @@ def _standardize_dataframe(df: pd.DataFrame, timezone: str) -> pd.DataFrame:
     return df
 
 
-def fetch_yfinance_pair(pair: str, start: str, end: Optional[str], interval: str, timezone: str) -> pd.DataFrame:
-    df = yf.download(pair, start=start, end=end, interval=interval, progress=False, auto_adjust=False)
+def fetch_yfinance_pair(
+    pair: str,
+    start: str,
+    end: Optional[str],
+    interval: str,
+    timezone: str,
+    retries: int = 3,
+    backoff: float = 2.0,
+) -> pd.DataFrame:
+    last_error: Optional[Exception] = None
+    df = pd.DataFrame()
+    for attempt in range(retries):
+        try:
+            df = yf.download(pair, start=start, end=end, interval=interval, progress=False, auto_adjust=False)
+            if not df.empty:
+                break
+        except Exception as exc:
+            last_error = exc
+        time.sleep(backoff ** attempt)
+
     if df.empty:
-        raise ValueError(f"No data returned for {pair}. Check symbol or provider availability.")
+        message = f"No data returned for {pair}. Check symbol or provider availability."
+        if last_error is not None:
+            message = f"{message} Last error: {last_error}"
+        raise ValueError(message)
     df = _standardize_dataframe(df, timezone)
     required_cols = ["open", "high", "low", "close", "volume"]
     for col in required_cols:

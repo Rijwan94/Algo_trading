@@ -20,7 +20,7 @@ def handle_missing(df: pd.DataFrame, method: str) -> pd.DataFrame:
 
 def clip_outliers(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
     returns = df["close"].pct_change().replace([np.inf, -np.inf], np.nan)
-    zscores = (returns - returns.mean()) / (returns.std(ddof=0) + EPSILON)
+    zscores = (returns - returns.mean()) / (returns.std(ddof=1) + EPSILON)
     mask = zscores.abs() > threshold
     df = df.copy()
     df.loc[mask, "close"] = np.nan
