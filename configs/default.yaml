@@ -1,0 +1,79 @@
+project:
+  base_timezone: "UTC"
+  name: "algo_trading_forex"
+
+data:
+  provider: "yfinance"
+  pairs:
+    - "EURUSD=X"
+    - "XAUUSD=X"
+    - "XAGUSD=X"
+    - "XAUCHF=X"
+  start: "2015-01-01"
+  end: null
+  interval: "1h"
+  storage:
+    raw_dir: "data/raw"
+    processed_dir: "data/processed"
+  ingestion:
+    schedule: "manual"
+    save_csv: true
+
+preprocessing:
+  timezone: "UTC"
+  missing: "ffill"
+  outlier:
+    method: "zscore"
+    zscore_threshold: 5.0
+  normalization: "zscore"
+  train_validation_test:
+    walk_forward:
+      initial_train_size: 0.6
+      validation_size: 0.2
+      test_size: 0.2
+      step_size: 0.1
+
+features:
+  returns:
+    horizons: [1]
+  volatility:
+    windows: [10, 20, 50]
+  volume:
+    use_volume: true
+    proxy: "range"
+  sessions:
+    enabled: true
+  correlations:
+    window: 50
+
+model:
+  type: "gradient_boosting"
+  horizon: 1
+  quantiles: [0.1, 0.5, 0.9]
+  hyperparameters:
+    n_estimators: 300
+    learning_rate: 0.05
+    max_depth: 3
+
+confidence:
+  target_coverage: 0.8
+  width_percentile: 0.9
+  minimum_confidence: 0.6
+
+evaluation:
+  metrics: ["mae", "rmse", "r2", "directional_accuracy", "interval_coverage", "coverage_error"]
+
+backtest:
+  transaction_cost_bps: 2.0
+  slippage_bps: 1.0
+  position_size: 1.0
+
+models:
+  output_dir: "models"
+  save_format: "joblib"
+  registry_file: "models/model_registry.json"
+
+risk:
+  acknowledge_real_money: true
+  require_confirmation: true
+  disclaimer_path: "docs/RISK_DISCLOSURE.md"

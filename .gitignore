@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+.env
+
+# Data artifacts
+/data/raw/
+/data/processed/
+/data/interim/
+/data/tmp/
+
+# Model training outputs (keep registry + README)
+/models/**/*.joblib
+/models/**/*.pkl
+/models/**/*.onnx
+/models/**/*.h5
+/models/**/*.pt
+/models/**/*.ckpt
+/models/**/*.npy
+/models/**/metrics.json
+/models/**/config_snapshot.yaml
+
+# Notebooks
+/.ipynb_checkpoints/
+
+# OS
+.DS_Store
