@@ -13,8 +13,16 @@ from src.models.train import load_model, prepare_data_for_training
 from src.execution.risk_manager import calculate_dynamic_risk, calculate_position_size
 from src.execution.mt5_trader import place_order
 
+# Try to import MT5 for actual pricing when live
+try:
+    import MetaTrader5 as mt5
+    from src.data.market_data_mt5 import fetch_mt5_data, init_mt5
+    MT5_AVAILABLE = True
+except ImportError:
+    MT5_AVAILABLE = False
+
 # Configuration
-SYMBOL = "EURUSD"
+SYMBOLS_TO_TRADE = ["XAUUSD", "XAGUSD", "XAUCHF", "EURUSD"]
 TIMEFRAME = "15m"
 HTF_TIMEFRAME = "1h"
 RISK_REWARD = 2.0
@@ -22,71 +30,97 @@ ACCOUNT_RISK_PERCENT = 1.0
 SIMULATED_BALANCE = 10000.0
 
 def run_bot_cycle():
-    print(f"--- Running Cycle for {SYMBOL} ---")
+    print(f"--- Running Bot Cycle at {datetime.now()} ---")
 
-    # 1. Load Model
-    model = load_model(SYMBOL, TIMEFRAME)
-    if model is None:
-        print("Model not found. Please train first.")
-        return
+    # User requested features: DXY, US 10y treasury yield, S&P 500, VIX, US 30, USTEC
+    CORRELATED_ASSETS = ["DXY", "US10Y", "SP500", "VIX", "US30", "USTEC"]
 
-    # 2. Fetch Latest Data
-    df = fetch_yfinance_data(SYMBOL, interval=TIMEFRAME, period="10d")
-    df_1h = fetch_yfinance_data(SYMBOL, interval=HTF_TIMEFRAME, period="10d")
-    df_dxy = fetch_yfinance_data("DXY", interval=TIMEFRAME, period="10d")
+    # Pre-fetch global data to save time in loop
+    corr_dfs = []
+    corr_suffixes = []
+    for asset in CORRELATED_ASSETS:
+        df_asset = fetch_yfinance_data(asset, interval=TIMEFRAME, period="60d")
+        if not df_asset.empty:
+            corr_dfs.append(df_asset)
+            corr_suffixes.append(asset)
 
     start = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
     end = datetime.now().strftime('%Y-%m-%d')
     df_news = fetch_forexfactory_calendar(start, end)
 
-    if df.empty:
-        print("Failed to fetch primary data.")
-        return
+    for symbol in SYMBOLS_TO_TRADE:
+        print(f"\nProcessing {symbol}...")
 
-    # 3. Engineer Full Feature Matrix
-    df_features = add_technical_features(df)
-    df_features = create_multi_timeframe_features(df_features, df_1h, prefix='HTF_')
-    df_features = merge_correlated_assets(df_features, [df_dxy], ["DXY"])
-    df_features = apply_news_impact_to_pair(df_features, df_news, SYMBOL)
+        # 1. Load Model
+        model = load_model(symbol, TIMEFRAME)
+        if model is None:
+            continue
 
-    if df_features.empty:
-        print("Feature engineering resulted in empty dataframe (likely not enough data).")
-        return
+        # 2. Fetch Latest Data
+        df = fetch_yfinance_data(symbol, interval=TIMEFRAME, period="60d")
+        df_1h = fetch_yfinance_data(symbol, interval=HTF_TIMEFRAME, period="60d")
 
-    # 4. Prepare latest row for prediction
-    latest_row = df_features.iloc[-1:].copy()
-    current_price = latest_row['close'].values[0]
-    current_atr = latest_row['atr_14'].values[0]
+        if df.empty or df_1h.empty:
+            print(f"Failed to fetch data for {symbol}.")
+            continue
 
-    # Add dummy target col for the preparation function so it doesn't fail
-    latest_row['target'] = 0
+        # 3. Engineer Full Feature Matrix
+        df_features = add_technical_features(df)
+        df_features = create_multi_timeframe_features(df_features, df_1h, prefix='HTF_')
+        df_features = merge_correlated_assets(df_features, corr_dfs, corr_suffixes)
+        df_features = apply_news_impact_to_pair(df_features, df_news, symbol)
 
-    # Exclude price columns for prediction
-    X, _ = prepare_data_for_training(latest_row)
+        if df_features.empty:
+            print(f"Feature engineering resulted in empty dataframe for {symbol}.")
+            continue
 
-    # Ensure columns match model
-    expected_cols = model.get_booster().feature_names
-    for col in expected_cols:
-        if col not in X.columns:
-            X[col] = 0.0 # Fallback
-    X = X[expected_cols]
+        # 4. Prepare latest row for prediction
+        latest_row = df_features.iloc[-1:].copy()
+        current_atr = latest_row['atr_14'].values[0]
 
-    # 5. Predict
-    prediction = int(model.predict(X)[0]) # 1 for Buy, 0 for Sell
+        # Add dummy target col for the preparation function so it doesn't fail
+        latest_row['target'] = 0
 
-    # 6. Risk Management
-    sl, tp = calculate_dynamic_risk(current_price, current_atr, prediction, RISK_REWARD)
-    volume = calculate_position_size(SIMULATED_BALANCE, ACCOUNT_RISK_PERCENT, current_price, sl)
+        # Exclude price columns for prediction
+        X, _ = prepare_data_for_training(latest_row)
 
-    print(f"Analysis complete on full multi-timeframe & fundamental feature set.")
-    print(f"Price: {current_price:.5f}, ATR: {current_atr:.5f}")
-    print(f"Prediction: {'BUY/UP' if prediction == 1 else 'SELL/DOWN'}")
-    print(f"Risk: {ACCOUNT_RISK_PERCENT}% -> Lot Size: {volume}")
-    print(f"SL: {sl:.5f}, TP: {tp:.5f}")
+        # Ensure columns match model
+        expected_cols = model.get_booster().feature_names
+        for col in expected_cols:
+            if col not in X.columns:
+                X[col] = 0.0 # Fallback
+        X = X[expected_cols]
 
-    # 7. Execute
-    place_order(SYMBOL, prediction, volume, sl, tp)
-    print("Cycle complete.")
+        # 5. Predict
+        prediction = int(model.predict(X)[0]) # 1 for Buy, 0 for Sell
+
+        # 6. Get REAL Execution Price (Crucial Fix for MT5 live vs YFinance Proxy Futures)
+        if MT5_AVAILABLE and init_mt5():
+            # Get real spot price from terminal, not futures data
+            tick = mt5.symbol_info_tick(symbol)
+            if tick is not None:
+                current_price = tick.ask if prediction == 1 else tick.bid
+                mt5.shutdown()
+            else:
+                print(f"Failed to get tick from MT5 for {symbol}, falling back to proxy price.")
+                current_price = latest_row['close'].values[0]
+                mt5.shutdown()
+        else:
+            current_price = latest_row['close'].values[0]
+
+        # 7. Risk Management
+        sl, tp = calculate_dynamic_risk(current_price, current_atr, prediction, RISK_REWARD)
+        volume = calculate_position_size(SIMULATED_BALANCE, ACCOUNT_RISK_PERCENT, current_price, sl)
+
+        print(f"[{symbol}] Price: {current_price:.5f}, ATR: {current_atr:.5f}")
+        print(f"[{symbol}] Prediction: {'BUY/UP' if prediction == 1 else 'SELL/DOWN'}")
+        print(f"[{symbol}] Risk: {ACCOUNT_RISK_PERCENT}% -> Lot Size: {volume}")
+        print(f"[{symbol}] SL: {sl:.5f}, TP: {tp:.5f}")
+
+        # 8. Execute
+        place_order(symbol, prediction, volume, sl, tp)
+
+    print("\n--- Cycle Complete ---")
 
 if __name__ == "__main__":
     run_bot_cycle()

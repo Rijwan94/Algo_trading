@@ -8,46 +8,78 @@ from src.data.fundamental_data import fetch_forexfactory_calendar, apply_news_im
 from src.features.engineering import add_technical_features, merge_correlated_assets, create_multi_timeframe_features
 from src.models.train import create_target_variable, prepare_data_for_training, train_xgboost_model, save_model
 
-print("Fetching primary data (EURUSD 15m)...")
-df = fetch_yfinance_data("EURUSD", "15m", "60d") # YFinance max for 15m is 60d
+SYMBOLS_TO_TRAIN = ["XAUUSD", "XAGUSD", "XAUCHF", "EURUSD"]
+TIMEFRAME = "15m"
+HTF_TIMEFRAME = "1h"
 
-print("Fetching higher timeframe data (EURUSD 1h)...")
-df_1h = fetch_yfinance_data("EURUSD", "1h", "60d")
+# User requested features: DXY, US 10y treasury yield, S&P 500, VIX, US 30, USTEC
+CORRELATED_ASSETS = ["DXY", "US10Y", "SP500", "VIX", "US30", "USTEC"]
 
-print("Fetching correlated asset data (DXY 15m)...")
-df_dxy = fetch_yfinance_data("DXY", "15m", "60d")
-
+# Fetch news once
 print("Fetching fundamental news...")
 start = (datetime.now() - timedelta(days=60)).strftime('%Y-%m-%d')
 end = datetime.now().strftime('%Y-%m-%d')
 df_news = fetch_forexfactory_calendar(start, end)
 
-print("\nStarting Feature Engineering Pipeline...")
+print("Fetching correlated asset data...")
+corr_dfs = []
+corr_suffixes = []
+for asset in CORRELATED_ASSETS:
+    df_asset = fetch_yfinance_data(asset, interval=TIMEFRAME, period="60d")
+    if not df_asset.empty:
+        corr_dfs.append(df_asset)
+        corr_suffixes.append(asset)
 
-# 1. Base technicals on primary TF
-print("Adding technicals...")
-df = add_technical_features(df)
 
-# 2. Multi-Timeframe mapping
-print("Mapping higher timeframe context...")
-df = create_multi_timeframe_features(df, df_1h, prefix='HTF_')
+for symbol in SYMBOLS_TO_TRAIN:
+    print(f"\n=====================================")
+    print(f"Training Pipeline for {symbol}")
+    print(f"=====================================")
 
-# 3. Correlated Assets
-print("Merging DXY...")
-df = merge_correlated_assets(df, [df_dxy], ["DXY"])
+    print(f"Fetching primary data ({symbol} {TIMEFRAME})...")
+    df = fetch_yfinance_data(symbol, TIMEFRAME, "60d") # YFinance max for 15m is 60d
 
-# 4. Fundamental Impact
-print("Applying news impact...")
-df = apply_news_impact_to_pair(df, df_news, "EURUSD")
+    print(f"Fetching higher timeframe data ({symbol} {HTF_TIMEFRAME})...")
+    df_1h = fetch_yfinance_data(symbol, HTF_TIMEFRAME, "60d")
 
-# 5. Target Variable
-df = create_target_variable(df)
+    if df.empty or df_1h.empty:
+        print(f"Skipping {symbol} due to missing data.")
+        continue
 
-print(f"\nFinal Feature Matrix shape: {df.shape}")
-print("Features:", [c for c in df.columns if c not in ['target', 'open', 'high', 'low', 'close', 'future_return']])
+    print("Adding technicals...")
+    df = add_technical_features(df)
 
-X, y = prepare_data_for_training(df)
-print(f"Features shape: {X.shape}, Target shape: {y.shape}")
+    print("Mapping higher timeframe context...")
+    df = create_multi_timeframe_features(df, df_1h, prefix='HTF_')
 
-model, acc = train_xgboost_model(X, y)
-save_model(model, "EURUSD", "15m")
+    print("Merging Correlated Assets...")
+    # NOTE: Some correlated assets only trade during specific market hours. Merging them and dropping NA
+    # might result in dropping all rows if the asset market hours don't perfectly overlap
+    # the forex 24/5 market hours. Instead of dropna inside merge, we ffill then bfill, then dropna.
+    # The merge_correlated_assets function already ffills and then dropnas, which causes the zero shape issue.
+    df = merge_correlated_assets(df, corr_dfs, corr_suffixes)
+
+    if df.empty:
+        print(f"Skipping {symbol} due to empty feature matrix after merging correlated assets.")
+        continue
+
+    print("Applying news impact...")
+    df = apply_news_impact_to_pair(df, df_news, symbol)
+
+    print("Creating target variable...")
+    df = create_target_variable(df)
+
+    if df.empty:
+        print(f"Skipping {symbol} due to empty feature matrix after creating target variable.")
+        continue
+
+    print(f"Final Feature Matrix shape: {df.shape}")
+
+    X, y = prepare_data_for_training(df)
+
+    if X.empty:
+        print(f"Skipping {symbol} due to empty feature matrix after processing.")
+        continue
+
+    model, acc = train_xgboost_model(X, y)
+    save_model(model, symbol, TIMEFRAME)

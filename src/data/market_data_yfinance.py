@@ -2,16 +2,18 @@ import yfinance as yf
 import pandas as pd
 
 # Mapping typical symbols to yfinance symbols
+# Free Yahoo Finance is sometimes restrictive with specific metal/forex pairings,
+# so we use Futures as a highly correlated proxy for the model training in the sandbox.
 YF_SYMBOL_MAP = {
     # Forex
     "EURUSD": "EURUSD=X",
     "GBPUSD": "GBPUSD=X",
-    "USDJPY": "JPY=X", # YFinance USDJPY=X is sometimes broken, JPY=X is USD/JPY
+    "USDJPY": "JPY=X",
     "GBPJPY": "GBPJPY=X",
     "USDCHF": "CHF=X",
 
-    # Metals
-    "XAUUSD": "GC=F", # Gold Futures (often used as proxy on yfinance, or "XAUUSD=X" if available)
+    # Metals (using Futures as proxy for YFinance)
+    "XAUUSD": "GC=F", # Gold Futures
     "XAGUSD": "SI=F", # Silver Futures
 
     # Indices
@@ -35,6 +37,28 @@ def fetch_yfinance_data(symbol, interval="1h", period="1y"):
     Returns:
         pd.DataFrame: DataFrame containing OHLCV data with datetime index.
     """
+
+    # Special Synthetic pair handling for XAUCHF
+    # XAUCHF = XAUUSD * USDCHF. Since YF doesn't reliable have XAUCHF=X, we synthesize it if needed.
+    if symbol == "XAUCHF":
+        df_xau = fetch_yfinance_data("XAUUSD", interval, period)
+        df_chf = fetch_yfinance_data("USDCHF", interval, period)
+
+        if df_xau.empty or df_chf.empty:
+            return pd.DataFrame()
+
+        # Align indexes
+        df_xau, df_chf = df_xau.align(df_chf, join='inner')
+
+        # Multiply to get synthetic OHLC
+        df_synth = pd.DataFrame(index=df_xau.index)
+        df_synth['open'] = df_xau['open'] * df_chf['open']
+        df_synth['high'] = df_xau['high'] * df_chf['high']
+        df_synth['low'] = df_xau['low'] * df_chf['low']
+        df_synth['close'] = df_xau['close'] * df_chf['close']
+        df_synth['tick_volume'] = df_xau['tick_volume'] # Proxy volume
+        return df_synth
+
     yf_symbol = YF_SYMBOL_MAP.get(symbol, symbol)
 
     ticker = yf.Ticker(yf_symbol)
@@ -64,6 +88,10 @@ def fetch_yfinance_data(symbol, interval="1h", period="1y"):
 
 if __name__ == "__main__":
     # Test fetch
-    df = fetch_yfinance_data("EURUSD", interval="1h", period="7d")
-    print("EURUSD 1h data:")
+    df = fetch_yfinance_data("XAUUSD", interval="1h", period="7d")
+    print("XAUUSD 1h data:")
     print(df.head())
+
+    df2 = fetch_yfinance_data("XAUCHF", interval="1h", period="7d")
+    print("XAUCHF 1h data:")
+    print(df2.head())
