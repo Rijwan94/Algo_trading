@@ -1,45 +1,41 @@
-# Algo_trading
+# End-to-End Trading ML Pipeline
 
-ML/AI pipeline for forex and metals time-series forecasting with volatility- and volume-aware features, walk-forward evaluation, and risk-aware confidence scoring.
+This project builds a full pipeline to trade high-volatility pairs (Forex, Gold, Silver) using Machine Learning based on Technical Analysis, Multi-Timeframe Alignment, Correlated Assets (DXY, VIX, US10Y, SP500, US30, USTEC), and Fundamental News Impact.
 
-## Key Features
-- Fetches historical data for forex/metals pairs (default: Yahoo Finance).
-- Volatility, volume/tick proxy, session, and correlation features.
-- Walk-forward training to reduce data leakage.
-- Quantile regression to estimate prediction intervals and confidence.
-- Backtesting with transaction costs and slippage.
-- Model artifacts saved with metadata and registry.
+## Setup
 
-## Quick Start
+1. Install requirements:
+`pip install -r requirements.txt`
 
-1. **Install dependencies**
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   ```
+2. Train the model:
+`export PYTHONPATH=$PYTHONPATH:$(pwd) && python test_training.py`
+This generates `.pkl` model files for the specified symbols (e.g. XAUUSD, XAGUSD, XAUCHF, EURUSD) by pulling in all multi-timeframe and news data. Models are excluded from git.
 
-2. **Confirm requirements**
-   Update `configs/default.yaml` for:
-   - prediction horizon and bar timeframe
-   - supported pairs
-   - data provider (default: yfinance)
-   - accuracy/confidence metrics and thresholds
+3. Run the bot cycle (Execution):
+`export PYTHONPATH=$PYTHONPATH:$(pwd) && python src/main.py`
+This runs predictions on the latest live data and simulates an MT5 trade using a dynamic 1:2 ATR-based Risk/Reward ratio.
 
-3. **Run training**
-   ```bash
-   PYTHONPATH=src python -m algo_trading.cli --config configs/default.yaml --acknowledge-risk
-   ```
+*Note: The actual MetaTrader 5 module will automatically activate if run on a Windows machine with MT5 installed and python-metatrader5 package configured.*
 
-4. **Review outputs**
-   - Model artifacts: `models/<pair>/<timestamp>/`
-   - Registry: `models/model_registry.json`
+## Running the Bot Automatically on your Laptop
 
-## Notes on Data Providers
-- `yfinance` supports many FX and metals symbols (e.g., `EURUSD=X`, `XAUUSD=X`).
-- Symbol availability varies; confirm tickers like `XAUCHF=X` are supported or replace with your preferred data source.
-- For providers without real volume, the pipeline uses a range-based proxy.
-- To use CSV ingestion, set `data.provider: csv` and place files in `data/raw/` named `<PAIR>.csv`.
+To run this completely automated on your Windows laptop connected to your MetaTrader 5 account:
 
-## Risk Disclosure
-See [docs/RISK_DISCLOSURE.md](docs/RISK_DISCLOSURE.md). Real-money trading requires explicit acknowledgement.
+1. **Install Python & MetaTrader 5**
+   - Make sure you have Python installed on your Windows laptop.
+   - Download and log into the MetaTrader 5 application. Keep it open running in the background.
+
+2. **Install Dependencies**
+   - Open Command Prompt or PowerShell in this project folder.
+   - Run: `pip install -r requirements.txt`
+   - Run: `pip install MetaTrader5`
+
+3. **Train the Models First**
+   - The bot needs the models built on your machine first.
+   - Run: `python test_training.py`
+   - Wait for it to fetch data and save the `.pkl` files to the `models/` folder.
+
+4. **Start the Fully Automated Bot**
+   - Run: `python run_automated.py`
+   - The script will automatically calculate the exact time until the next 15-minute candle closes (e.g., waiting for 10:15, 10:30, 10:45) and will automatically execute `src/main.py` at exactly the right time all day long.
+   - Leave the command prompt window open.
